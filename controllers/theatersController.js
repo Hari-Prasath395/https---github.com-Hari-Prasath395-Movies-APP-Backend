@@ -182,36 +182,6 @@ router.delete('/deleteShow/:showId', async (req, res) => {
   }
 });
 
-//get all theaters which have shows of a movie
-
-// router.post('/getAllTheatersByMovie', async (req, res) => {
-//   try {
-//     const { movie, date } = req.body;
-
-//     // Find all shows of a movie
-//     const shows = await Show.find({ movie, date }).populate('theater');
-
-//     // Get all unique theaters
-//     const uniqueTheaters = [];
-//     shows.forEach((show) => {
-//       const theater = uniqueTheaters.find((theater) => theater._id.toString() === show.theater._id.toString());
-//       if (!theater) {
-//         const showsForThisTheater = shows.filter((showobj) => showobj.theater._id.toString() === show.theater._id.toString());
-//         uniqueTheaters.push(show.theater);
-//       }
-//     });
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Theaters fetched successfully",
-//       data: uniqueTheaters
-//     });
-//   } catch (error) {
-//     console.error('Failed to fetch theaters:', error);
-//     res.status(500).json({ success: false, error: 'Failed to fetch theaters' });
-//   }
-// });
-
 router.post('/getAllTheatersByMovie', async (req, res) => {
   try {
     const { movie, date } = req.body;

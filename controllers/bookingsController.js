@@ -2,163 +2,104 @@ const express = require("express");
 const authMiddleware = require("../Middleware/authMiddleware");
 const Booking = require("../models/bookingModel");
 const router = express.Router();
-const env = require('dotenv').config();
+const env = require("dotenv").config();
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 const stripe = require("stripe")(stripeKey);
+const Show = require("../models/showsModel");
+const Movie = require("../models/movieModel");
+const Theater = require("../models/theaterModel");
 
-console.log(stripeKey);
-//making payment
-
-// router.post("/make-payment", async (req, res) => {
-//   try {
-//     const { token, amount } = req.body;
-
-//     //create a customer
-
-//     const customer = await stripe.customers.create({
-//       email: token.email,
-//       source: token.id,
-//     });
-
-//     //creating charges
-//     const charge = await stripe.customers.create(
-//       {
-//         amount: amount,
-//         currency: "usd",
-//         customer: customer.id,
-//         receipt_email: token.email,
-//         description: "Purchased the movie ticket",
-//       },
-//       {
-//         idempotencykey: Math.random().toString(36).substring(7),
-//       }
-//     );
-//     const transactionId = charge.id;
-//     res.status(200).json({
-//       success: true,
-//       message: "Payment Successful",
-//       data: transactionId,
-//     });
-//   } catch (error) {
-//     res.status(400).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// });
-// router.post('/make-payment', async (req, res) => {
-//   try {
-//     const { token, amount } = req.body;
-
-//     // Create customer
-//     const customer = await stripe.customers.create({
-//       email: token.email,
-//       source: token.id
-//     });
-
-//     // Make charge
-//     const charge = await stripe.charges.create({
-//       amount: amount,
-//       currency: 'usd',
-//       customer: customer.id,
-//       receipt_email: token.email,
-//       description: 'Purchased the movie ticket'
-//     }, {
-//       idempotencyKey: Math.random().toString(36).substring(7)
-//     });
-
-//     const transactionId = charge.id;
-
-//     res.status(200).json({
-//       success: true,
-//       message: 'Payment Successful',
-//       data: transactionId
-//     });
-//   } catch (error) {
-//     let errorMessage = 'Payment failed';
-
-//     if (error.type === 'StripeCardError') {
-//       errorMessage = error.message;
-//     } else if (error.type === 'StripeInvalidRequestError') {
-//       errorMessage = 'Invalid request';
-//     } else if (error.type === 'StripeAPIError') {
-//       errorMessage = 'Stripe API error';
-//     } else if (error.type === 'StripeConnectionError') {
-//       errorMessage = 'Stripe connection error';
-//     } else if (error.type === 'StripeAuthenticationError') {
-//       errorMessage = 'Stripe authentication error';
-//     } else if (error.type === 'StripeRateLimitError') {
-//       errorMessage = 'Stripe rate limit exceeded';
-//     } else if (error.code === 'parameter_missing') {
-//       errorMessage = 'Missing required parameter';
-//     } else {
-//       errorMessage = 'An unexpected error occurred';
-//     }
-
-//     res.status(500).json({ success: false, message: errorMessage });
-//   }
-// });
-
-router.post('/make-payment', async (req, res) => {
+router.post("/make-payment", async (req, res) => {
   try {
     const { token, amount } = req.body;
-    console.log(token,amount);
-    // Create customer
-    const customer = await stripe.customers.create({
-      email: token.email,
-      source: token.id
-    });
 
-    // console.log(customer);
+    // Validate input
+    if (!token || !amount) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing required parameters." });
+    }
 
-    // Make charge
-    const charge = await stripe.charges.create({
-      amount: amount,
-      currency: 'usd',
-      customer: customer.id,
+    console.log(token, amount);
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: "inr",
+      payment_method_types: ["card"],
       receipt_email: token.email,
-      description: 'Purchased the movie ticket'
     });
 
-    // console.log(charge);
-
-    const transactionId = charge.id;
+    const transactionId = paymentIntent.client_secret;
 
     console.log(transactionId);
 
     res.status(200).json({
       success: true,
-      message: 'Payment Successful',
-      data: transactionId
+      message: "Payment initiated",
+      transactionId,
     });
   } catch (error) {
-    let errorMessage = 'Payment failed';
+    let errorMessage = "Payment failed";
 
-    if (error.code === 'card_declined') {
-      errorMessage = 'Card declined. Please try another card.';
-    } else if (error.code === 'parameter_missing') {
-      errorMessage = 'Missing required parameter. Please provide all the required information.';
+    if (error.code === "card_declined") {
+      errorMessage = "Card declined. Please try another card.";
+    } else if (error.code === "parameter_missing") {
+      errorMessage =
+        "Missing required parameter. Please provide all the required information.";
     } else {
-      errorMessage = 'An unexpected error occurred. Please try again later.';
+      errorMessage = "An unexpected error occurred. Please try again later.";
+      console.error(error);
     }
 
     res.status(500).json({ success: false, message: errorMessage });
   }
 });
 
-
-
 router.post("/bookshow", async (req, res) => {
   try {
     const newBooking = new Booking(req.body);
-    await newBooking.save();
+    const savedBooking = await newBooking.save();
+
+    const show = await Show.findById(req.body.show);
+    const updatedSeats = [...show.bookedSeats, ...req.body.seats];
+    await Show.findByIdAndUpdate(req.body.show, { bookedSeats: updatedSeats });
+
     res.status(200).json({
       success: true,
-      message: "show booked successfully",
-      data: newBooking,
+      message: "Show booked successfully",
+      data: savedBooking,
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+//get all bookings by user
+
+router.get("/get-all-bookings", async (req, res) => {
+  try {
+    const bookings = await Booking.find({}).populate({
+      path: "show",
+      populate: [
+        { path: "movie", model: Movie },
+        { path: "theater", model: Theater },
+      ],
+    });
+
+    const filteredBookings = bookings.filter(
+      (booking) => booking.show !== null
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "All bookings fetched successfully",
+      data: filteredBookings,
+    });
+  } catch (error) {
+    res.status(400).json({
       success: false,
       message: error.message,
     });
